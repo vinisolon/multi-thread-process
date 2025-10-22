@@ -3,13 +3,13 @@ package org.solon.app.client;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.solon.app.dto.Data;
+import org.solon.app.dto.DataDomain;
 
 @Slf4j
 @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public class ApiClient {
 
-    public static void call(Data data) {
+    public static void call(DataDomain data) {
         try {
             Thread.sleep(2000);
         } catch (InterruptedException e) {

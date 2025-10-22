@@ -3,7 +3,6 @@ package org.solon.app.service;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.solon.app.dto.Data;
 
 @Slf4j
 @RequiredArgsConstructor(access = AccessLevel.PRIVATE)

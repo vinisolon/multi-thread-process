@@ -7,7 +7,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.solon.app.dto.Data;
+import org.solon.app.dto.DataDomain;
+import org.solon.app.repository.DataRepository;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.core.task.support.TaskExecutorAdapter;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -39,6 +40,9 @@ class FutureServiceTest {
     @Mock
     private TransactionStatus transactionStatus;
 
+    @Mock
+    private DataRepository repository;
+
     // 4. O serviço será construído, mas as dependências finais serão ajustadas manualmente
     @InjectMocks
     private FutureService service;
@@ -59,7 +63,7 @@ class FutureServiceTest {
         // 1. Inicializamos o serviço manualmente.
         //    - Passamos o Executor real.
         //    - Passamos o mock do PlatformTransactionManager (para que o construtor do TransactionTemplate não lance NPE).
-        this.service = new FutureService(virtualTaskExecutor, this.transactionManager);
+        this.service = new FutureService(virtualTaskExecutor, this.transactionManager, this.repository);
 
         // 2. Usamos Reflexão para garantir que o campo 'transactionTemplate' no *serviço* seja substituído pelo nosso *mock*.
         //    Isso é necessário porque o construtor do serviço cria um TransactionTemplate *real*
@@ -79,7 +83,7 @@ class FutureServiceTest {
             // Capturamos o callback (o lambda do método process())
             // Usamos @SuppressWarnings para resolver o aviso 'unchecked assignment'
             @SuppressWarnings("unchecked")
-            TransactionCallback<Data> callback = (TransactionCallback<Data>) invocation.getArgument(0);
+            TransactionCallback<DataDomain> callback = (TransactionCallback<DataDomain>) invocation.getArgument(0);
 
             // Executamos o callback, passando o nosso mock de TransactionStatus, resolvendo o NPE.
             return callback.doInTransaction(transactionStatus);

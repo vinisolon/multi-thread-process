@@ -2,8 +2,10 @@ package org.solon.app.service;
 
 import lombok.extern.slf4j.Slf4j;
 import org.solon.app.client.ApiClient;
-import org.solon.app.dto.Data;
-import org.solon.app.repository.FutureRepository;
+import org.solon.app.dto.DataDomain;
+import org.solon.app.entity.DataEntity;
+import org.solon.app.enums.DataStatus;
+import org.solon.app.repository.DataRepository;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
@@ -19,16 +21,17 @@ public class FutureService {
 
     private final TaskExecutor virtualTaskExecutor;
     private final TransactionTemplate transactionTemplate;
-
-    private static final String SUCCESS = "SUCCESS";
+    private final DataRepository repository;
 
     public FutureService(@Qualifier("virtualTaskExecutor") TaskExecutor virtualTaskExecutor,
-                         PlatformTransactionManager transactionManager) {
+                         PlatformTransactionManager transactionManager,
+                         DataRepository repository) {
         this.virtualTaskExecutor = virtualTaskExecutor;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.repository = repository;
     }
 
-    public void process_v1(List<Data> dataset) {
+    public void process_v1(List<DataDomain> dataset) {
 
         var futures = dataset.stream()
                 .map(data -> CompletableFuture
@@ -36,12 +39,11 @@ public class FutureService {
                         .supplyAsync(() -> process(data), virtualTaskExecutor)
 
                         // T2: Finaliza com sucesso
-                        .thenAccept(item -> log.info("DATA={} PROCESSED", item.getCode()))
+                        .thenAccept(item -> log.info("PROCESSED={}", item.getCode()))
 
                         // T3: Tratamento de erro (compensação paralela)
-                        .exceptionally(ex -> {
-                            Throwable originalEx = ex.getCause() != null ? ex.getCause() : ex;
-                            log.error("DATA={}, FALHA={}", data.getCode(), originalEx.getMessage());
+                        .exceptionally(e -> {
+                            log.error("FAILED={} REASON={}", data.getCode(), e.getMessage());
                             // Dispara o registro de falha (T3) de forma assíncrona/paralela
                             handle(data);
                             return null; // CHAVE: Recupera o Future para não interromper o allOf()
@@ -53,24 +55,24 @@ public class FutureService {
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
     }
 
-    private Data process(Data data) {
+    private DataDomain process(DataDomain data) {
         return transactionTemplate.execute(status -> {
             try {
-                save(data, "PROCESSING");
+                save(data, DataStatus.PROCESSING);
 
                 throwException333(data);
 
                 if (data.getType().equals("A")) {
-                    saveOther(data, SUCCESS);
+                    save(data, DataStatus.PROCESSED); // Simula escrita no DB (I/O)
                 } else if (data.getType().equals("B")) {
                     if (data.shouldCallApi()) {
-                        ApiClient.call(data); // Simula a escrita da falha no DB (I/O)
+                        ApiClient.call(data); // Simula chamada client externo (I/O)
                     }
+                    save(data, DataStatus.PROCESSED);
                 } else {
-                    ApiClient.call(data); // Simula a escrita da falha no DB (I/O)
+                    ApiClient.call(data); // Simula chamada client (I/O)
+                    save(data, DataStatus.PROCESSED); // Simula escrita no DB (I/O)
                 }
-
-                save(data, SUCCESS);
 
                 throwException1000(data);
 
@@ -85,36 +87,28 @@ public class FutureService {
         });
     }
 
-    private void throwException1000(Data data) {
+    private void save(DataDomain data, DataStatus status) {
+        data.setStatus(status);
+        repository.save(new DataEntity(data));
+    }
+
+    private void throwException1000(DataDomain data) {
         if (data.getCode() % 1000 == 0) {
             throw new RuntimeException("FAIL 1000");
         }
     }
 
-    private void throwException333(Data data) {
+    private void throwException333(DataDomain data) {
         if (data.getCode() % 333 == 0) {
             throw new RuntimeException("FAIL 333");
         }
     }
 
-    private void save(Data data, String status) {
-        data.setStatus(status);
-        FutureRepository.save(data); // Simula a escrita da falha no DB (I/O)
-    }
-
-    private void saveOther(Data data, String status) {
-        data.setStatus(status);
-        FutureRepository.saveOther(data); // Simula a escrita da falha no DB (I/O)
-    }
-
-    private void handle(Data data) {
-        CompletableFuture.runAsync(() -> {
-            // Transação T3: Nova transação isolada para registrar o FAIL
-            transactionTemplate.executeWithoutResult(status -> {
-                log.error("DATA={} FAIL", data.getType());
-                saveOther(data, "FAIL"); // Simula a escrita da falha no DB (I/O)
-            });
-        }, virtualTaskExecutor);
+    private void handle(DataDomain data) {
+        CompletableFuture.runAsync(() ->
+                // Transação T3: Nova transação isolada para registrar o FAIL
+                transactionTemplate.executeWithoutResult(status ->
+                        save(data, DataStatus.FAILED)), virtualTaskExecutor);
     }
 
 }

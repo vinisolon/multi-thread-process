@@ -1,14 +1,16 @@
 package org.solon.app.dto;
 
 import lombok.AllArgsConstructor;
+import org.solon.app.enums.DataStatus;
 
 @lombok.Data
 @AllArgsConstructor
-public class Data {
+public class DataDomain {
 
-    private int code;
+    private Long id;
+    private Long code;
     private String type;
-    private String status;
+    private DataStatus status;
     private Boolean callApi;
 
     public boolean shouldCallApi() {
